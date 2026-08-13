@@ -1387,7 +1387,9 @@ class SinglePositionMultiTokenCandidateGenerator(AssistedCandidateGenerator):
 
             next_token_scores = outputs.logits[:, -1, :]
             if self.logits_processor:
-                next_token_scores = LogitsProcessorList(self.logits_processor)(candidate_ids, next_token_scores.float())
+                next_token_scores = LogitsProcessorList(self.logits_processor)(
+                    candidate_ids, next_token_scores.float()
+                )
             if self.generation_config.do_sample:
                 probs = nn.functional.softmax(next_token_scores, dim=-1, dtype=torch.float32)
                 last_token_id = torch.multinomial(probs, num_samples=1)
