@@ -49,6 +49,9 @@ class Gemma4AssistantForCausalLM(nn.Module):
     def device(self):
         return self.fixed_logits.device
 
+    def _supports_logits_to_keep(self):
+        return False
+
     def forward(self, inputs_embeds, **kwargs):
         batch_size = inputs_embeds.shape[0]
         return SimpleNamespace(
