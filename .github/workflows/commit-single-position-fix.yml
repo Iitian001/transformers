@@ -1,0 +1,27 @@
+name: Commit validated single-position fix
+
+on:
+  push:
+    branches:
+      - agent/fix-speculative-candidate-q
+
+permissions:
+  contents: write
+
+jobs:
+  commit-fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/fix-speculative-candidate-q
+
+      - name: Apply validated source transformation
+        run: python .github/scripts/apply_single_position_fix.py
+
+      - name: Commit source file
+        uses: stefanzweifel/git-auto-commit-action@v6
+        with:
+          commit_message: fix single-position speculative proposal scores
+          file_pattern: src/transformers/generation/candidate_generator.py
