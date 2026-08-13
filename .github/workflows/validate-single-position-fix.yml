@@ -1,0 +1,42 @@
+name: Validate single-position speculative fix
+
+on:
+  push:
+    branches:
+      - agent/fix-speculative-candidate-q
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/fix-speculative-candidate-q
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Apply source fix
+        run: python .github/scripts/apply_single_position_fix.py
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e '.[torch,testing]'
+
+      - name: Run focused regression tests
+        run: python -m pytest -q tests/generation/test_single_position_candidate_generator.py
+
+      - name: Check diff whitespace
+        run: git diff --check
+
+      - name: Upload validated source
+        uses: actions/upload-artifact@v4
+        with:
+          name: validated-candidate-generator
+          path: src/transformers/generation/candidate_generator.py
