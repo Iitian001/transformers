@@ -1370,7 +1370,7 @@ class SinglePositionMultiTokenCandidateGenerator(AssistedCandidateGenerator):
 
         # Drafter autoregressive loop
         drafted_logits = []
-        drafted_tokens = []
+        candidate_ids = input_ids
 
         for _ in range(max_new_tokens):
             last_token_embedding = self.target_model_input_embeddings(last_token_id)
@@ -1385,7 +1385,14 @@ class SinglePositionMultiTokenCandidateGenerator(AssistedCandidateGenerator):
                     use_cache=False,
                 )
 
-            last_token_id = outputs.logits.argmax(dim=-1)
+            next_token_scores = outputs.logits[:, -1, :]
+            if self.logits_processor:
+                next_token_scores = LogitsProcessorList(self.logits_processor)(candidate_ids, next_token_scores.float())
+            if self.generation_config.do_sample:
+                probs = nn.functional.softmax(next_token_scores, dim=-1, dtype=torch.float32)
+                last_token_id = torch.multinomial(probs, num_samples=1)
+            else:
+                last_token_id = torch.argmax(next_token_scores, dim=-1, keepdim=True)
             last_hidden_state = outputs.last_hidden_state
 
             # For stopped sequences, replace drafted tokens with pad and logits with zeros.
@@ -1393,12 +1400,16 @@ class SinglePositionMultiTokenCandidateGenerator(AssistedCandidateGenerator):
                 stopped = sequence_stopped.unsqueeze(1)  # (batch, 1) for broadcasting
                 last_token_id = torch.where(stopped, self.generation_config.pad_token_id, last_token_id)
                 drafted_logits.append(
-                    torch.where(stopped.unsqueeze(-1), torch.zeros_like(outputs.logits), outputs.logits)
+                    torch.where(
+                        stopped.unsqueeze(-1),
+                        torch.zeros_like(next_token_scores).unsqueeze(1),
+                        next_token_scores.unsqueeze(1),
+                    )
                 )
             else:
-                drafted_logits.append(outputs.logits)
+                drafted_logits.append(next_token_scores.unsqueeze(1))
 
-            drafted_tokens.append(last_token_id)
+            candidate_ids = torch.cat([candidate_ids, last_token_id], dim=1)
 
             # Update stop status: mark sequences whose latest token is an EOS token.
             if self.eos_token_id is not None:
@@ -1409,8 +1420,6 @@ class SinglePositionMultiTokenCandidateGenerator(AssistedCandidateGenerator):
                 if sequence_stopped.all():
                     break
 
-        # --- Assemble output ---
-        candidate_ids = torch.cat([input_ids, torch.cat(drafted_tokens, dim=1)], dim=1)
         candidate_logits = torch.cat(drafted_logits, dim=1)
         return candidate_ids, candidate_logits
 
